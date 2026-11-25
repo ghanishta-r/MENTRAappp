@@ -1,97 +1,34 @@
 # MENTRA
 
-A mentorship and networking platform for college students. Students find mentors, send requests, schedule
-sessions, track learning goals, receive resources and rate the experience. Mentors manage requests,
-availability, students, sessions, resources and reviews.
-
-**Stack:** HTML5 · CSS3 · JavaScript · Bootstrap 5 · Node.js + Express · MongoDB + Mongoose · JWT + bcrypt · Python (optional matching module)
+A student-first mentoring platform built with vanilla JavaScript, Bootstrap, Express, MongoDB, and a Python NLP matching service.
 
 ## Run locally
 
-Requirements: Node 18.11+, MongoDB (local, or a free MongoDB Atlas cluster).
+1. Install Node.js 20+ and MongoDB Community Server (or use a MongoDB Atlas connection string).
+2. Copy `.env.example` to `.env` and set a long, unique `JWT_SECRET` and your database URI.
+3. Run `npm install`, then `npm run dev`.
+4. Open `http://localhost:3000`. The web app runs without Python; Python enables richer semantic recommendations.
 
-```bash
-npm install
-cp .env.example .env        # Windows: copy .env.example .env
-# edit .env: set JWT_SECRET (and MONGO_URI if not using local MongoDB)
-npm run dev
-```
-Open http://localhost:5000
+To preview without MongoDB, run `npm run preview` and open `http://localhost:4173` for the Milestone 2 architecture and database design page. The mentorship product UI is at `http://localhost:4173/app`. Sign-in and persistent features require the full app and MongoDB.
 
-Generate a secret: `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`
+Install the optional Python matcher with `python -m venv .venv`, activate it, and run `pip install -r services/recommender/requirements.txt`. Set `PYTHON_BIN` in `.env` if the Python executable is not named `python`. Express sends profile data as JSON over stdin to `ai/matcher.py`; if Python or scikit-learn is unavailable, discovery falls back to transparent skills and interests overlap. `services/recommender/app.py` also provides an optional HTTP wrapper around the same matcher.
 
-### Demo / test accounts
-There is **no seeded or fake data**. To demo, register two accounts (use two different browsers or one normal and one private window):
-1. Register as **Mentor** → complete the profile (headline, bio, skills, availability).
-2. Register as **Student** → complete the profile (interests + learning goals) → **Discover Mentors** → send a request.
-3. As the mentor: accept the request → schedule a session → mark it completed.
-4. As the student: log goals/progress, view resources, rate the session.
+## Layout
 
-## MongoDB connection
-`server/config/db.js` reads `MONGO_URI` from `.env` (never hardcoded; `.env` is git-ignored).
-Local: `mongodb://127.0.0.1:27017/mentra`. Atlas: use the `mongodb+srv://...` string from the Atlas dashboard.
-Collections and indexes are created automatically by Mongoose on first run.
+- `public/`: responsive browser interface and UI interactions.
+- `server/`: Express API, Mongo connection, models, auth, and routes.
+- `services/recommender/`: optional FastAPI semantic matching service.
 
-## Authentication
-- Passwords hashed with bcrypt (12 rounds) in `models/User.js`.
-- Login issues a JWT stored in an **httpOnly, SameSite=Strict cookie** (`mentra_token`), so it is not readable by page JavaScript and no auth data lives in localStorage. `Secure` is enabled automatically when `NODE_ENV=production` (requires HTTPS).
-- `middleware/auth.js`: `protect` verifies the token on every `/api` route except `/auth/*`, `/health`, `/public/stats`; `requireRole('mentor'|'mentee')` enforces roles.
-- Every query is scoped to the logged-in user (e.g. you can only act on your own requests, sessions and goals; mentors can view goals only of students they are connected to).
-- Also: Helmet (CSP), rate limiting (global + stricter on login/register), request validation (`middleware/validate.js`), NoSQL-operator stripping (`middleware/sanitize.js`), 100 kb body limit, central error handler.
+## Milestone 2 architecture
 
-## Knowledge Base (past solutions)
-Students and mentors record a problem and the solution that worked, optionally linked to a completed session, with category and tags.
-Anyone can search (title, problem, solution, tags), filter by category/tag, sort by newest, most helpful or most viewed, and mark entries helpful (one vote each, not your own).
-Files: `models/KnowledgeEntry.js`, `controllers/knowledgeController.js`, `public/pages/knowledge.html`, `public/js/knowledge.js`. API: `GET/POST /knowledge`, `GET /knowledge/tags`, `GET/PUT/DELETE /knowledge/:id`, `POST /knowledge/:id/helpful`.
+The browser uses JSON REST endpoints in Express. Mongoose persists 11 collections: `User`, `MentorProfile`, `MenteeProfile`, `MentorshipRequest`, `MentorshipConnection`, `Session`, `Goal`, `Progress`, `Resource`, `Feedback`, and `Notification`. Profile records are split by role; accepting a request creates a connection; sessions belong to connections; feedback belongs to a completed session; and every goal progress change is recorded in `Progress`.
 
-## Alpha test tooling
-- Thumbs up/down on every match (mentor cards, mentor profile, incoming requests) stored in `MatchFeedback` with the server-computed score at that moment.
-- Set `ALPHA_ADMIN_EMAILS=you@college.edu` in `.env`; that account gets an **Alpha Report** page (precision, good-rate by score bucket, false positives/negatives, CSV export).
-- `npm run smoke` runs an automated end-to-end check of the whole journey against a running server.
-- The test protocol, tasks, metrics and survey are in `docs/ALPHA_TEST_PLAN.md`.
+If you already have records from the original MENTRA schema, set `MONGODB_URI` to that database and run `npm run migrate:milestone2` once before starting the updated app. The migration copies embedded profiles into the role-specific collections, connects accepted requests and sessions, and records each existing goal's current progress without deleting the original fields.
 
-## Matching (what is real)
-`server/services/matchService.js` scores mentors for a student from real profile data:
-shared topics (interests/skills vs mentor skills/expertise/interests), text relevance of goals vs mentor bio/headline, experience, and ratings.
-- Default engine: transparent keyword/topic overlap. It is **not** machine learning and the UI does not claim it is.
-- Optional Python engine: `ai/matcher.py` (TF-IDF + cosine similarity, standard library only). Enable with `AI_ENABLED=true`. Falls back automatically if Python is unavailable.
-- Each score carries `engine` (`keyword-overlap` or `python-tfidf`) and the shared topics that produced it. Scores are `null` (hidden) if the student has no interests/goals.
-- Future: replace `score()` in `ai/matcher.py` with embeddings or a trained ranker; the stdin/stdout contract stays the same. See `ai/README.md`.
+The Python recommendation module uses the stdin JSON interface shown in the reference architecture. A FastAPI wrapper is also available for a future separated deployment; the recommendation payload contains profile fields only.
 
-## Features → files
-| Feature | Backend | Frontend |
-|---|---|---|
-| Register / login / logout | `controllers/authController.js`, `routes/authRoutes.js` | `pages/login.html`, `register.html`, `js/auth.js` |
-| Profiles (mentee, mentor, availability) | `profileController.js`, `routes/profileRoutes.js`, `models/MentorProfile.js`, `MenteeProfile.js` | `pages/profile.html`, `js/profile.js` |
-| Dashboards | `dashboardController.js` | `pages/dashboard.html`, `js/dashboard.js` |
-| Mentor discovery, search, filters, profile | `mentorController.js` | `discover.js`, `mentor.js` |
-| Requests, accept / decline / cancel | `requestController.js` | `requests.js` |
-| Connections | `connectionController.js` | `connections.js` |
-| Sessions (conflict checks, reschedule, notes) | `sessionController.js` | `sessions.js` |
-| Goals + progress history + mentor notes | `goalController.js` | `goals.js` |
-| Resources (public or private share) | `resourceController.js` | `resources.js` |
-| Feedback and ratings | `feedbackController.js` | `feedback.js` |
-| Notifications | `notificationController.js`, `services/notifyService.js` | `notifications.js`, bell badge in `ui.js` |
-| App shell, modals, toasts, tag input | | `js/ui.js`, `js/api.js`, `css/style.css` |
+## Product and data notes
 
-All routes are declared in `server/routes/index.js`.
+Create a mentee or mentor account to use the platform. Mentor discovery is populated from real mentor profiles stored in MongoDB. Match explanations use profile overlap; an optional Python service adds TF-IDF similarity across the student's learning goals and mentors' bios. There are no seeded demo people or fabricated match percentages.
 
-## API summary (all under `/api`)
-`POST /auth/register|login|logout` · `GET /auth/me` · `GET|PUT /profiles/me` · `GET /dashboard`
-`GET /mentors` (mentee) `?q&skills&expertise&department&minRating&available&sort&page` · `GET /mentors/facets` · `GET /mentors/:id`
-`POST /requests` · `GET /requests?status=` · `PATCH /requests/:id/respond|cancel`
-`GET /connections` · `PATCH /connections/:id/end`
-`POST|GET /sessions` · `PATCH /sessions/:id`
-`POST|GET /goals` · `PUT|DELETE /goals/:id` · `GET|POST /goals/:id/progress`
-`GET|POST /resources` · `DELETE /resources/:id`
-`POST /feedback` · `GET /feedback/mine|received`
-`GET /notifications` · `GET /notifications/unread-count` · `PATCH /notifications/read-all|:id/read`
-
-## Deploying
-- Set `NODE_ENV=production`, a strong `JWT_SECRET`, an Atlas `MONGO_URI`, and serve behind HTTPS (cookies are `Secure` in production). `trust proxy` is enabled in production for platforms like Render/Railway/Heroku.
-- Bootstrap, Bootstrap Icons and the Google font load from CDNs. For a hardened deployment, self-host them and add SRI hashes.
-
-## Known limits / next steps
-- Discovery with "best match" ranks up to the top 300 filtered mentors in memory; fine for a campus, switch to precomputed scores for much larger catalogs.
-- No email delivery, password reset, avatar upload or in-app chat yet.
-- No automated test suite yet; a good next step is API tests with Jest + supertest + mongodb-memory-server.
+The API uses hashed passwords, JWTs in HttpOnly cookies, input validation, rate limiting, secure headers, ownership checks, and role checks. Before public launch, configure HTTPS, a managed MongoDB deployment and backups, a production-grade secret, origin allowlists, email verification/password recovery, moderation, and privacy/retention policies.
