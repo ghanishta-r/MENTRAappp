@@ -1,0 +1,19 @@
+# Server
+PORT=5000
+NODE_ENV=development
+
+# MongoDB: local install, or a MongoDB Atlas connection string (never commit the real one)
+MONGO_URI=mongodb://127.0.0.1:27017/mentra
+
+# Long random string
+JWT_SECRET=f97000cdef27dd7ac733af41d272e53ae040f4e99d6bc89a9c871c61f223874ddee599e1151bff708bdbd48235856e07
+
+# Only needed if the frontend is served from a different origin
+CLIENT_ORIGIN=
+
+# Optional Python matching module (see ai/README.md). Leave false to use the built-in keyword engine.
+AI_ENABLED=false
+PYTHON_BIN=python
+
+# Alpha test: comma-separated emails allowed to open the Alpha Report page and CSV export
+ALPHA_ADMIN_EMAILS=
